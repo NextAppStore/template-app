@@ -1,88 +1,87 @@
-# AGENTS.md — Click-n-Deploy App-Template
+# AGENTS.md — Click-n-Deploy App Template
 
-Betriebsanleitung für autonome Coding-Agents und Dozierende, die eine neue App für den
-AppStore entwickeln. Ziel: Ein funktionierendes, registrierbares App-Repository — ohne
-Zwischenfragen.
+Operating manual for autonomous coding agents and instructors developing a new app for
+the AppStore. Goal: a working, registrable app repository — without follow-up questions.
 
-**Lies zuerst Abschnitt 6 (Entscheidungsbefugnis).** Dort steht, was du allein entscheidest
-und wann du anhältst.
+**Read section 6 first (Decision Authority).** It explains what you decide on your own
+and when to stop and ask.
 
 ---
 
-## 1. Was eine App ist
+## 1. What an app is
 
-Eine App ist ein **Git-Repository** mit:
+An app is a **Git repository** containing:
 
 ```
 my-app/
-├── terraform/          ← Pflicht
+├── terraform/          ← Required
 │   ├── main.tf
 │   ├── variables.tf
 │   └── outputs.tf
-└── packer/             ← Optional (eigenes VM-Image)
+└── packer/             ← Optional (custom VM image)
     ├── template.pkr.hcl
     ├── variables.pkr.hcl
     └── scripts/
         └── provision.sh
 ```
 
-Die Plattform klont das Repo bei jedem Deploy auf einen **Git-Tag**, baut ggf. das
-Packer-Image, und führt `terraform apply` gegen OpenStack aus. Was in `outputs.tf`
-steht, erscheint im AppStore-UI und wird per Mail an die Endnutzer geschickt.
+The platform clones the repo at a **Git tag** for every deploy, optionally builds the
+Packer image, and runs `terraform apply` against OpenStack. Whatever is declared in
+`outputs.tf` appears in the AppStore UI and is emailed to end users.
 
-**Vollständige Spezifikation:** `README.md` in diesem Repo. Bei Widerspruch zwischen
-`AGENTS.md` und `README.md` gewinnt die `README.md`.
+**Full specification:** `README.md` in this repo. If `AGENTS.md` and `README.md`
+disagree, `README.md` wins.
 
 ---
 
-## 2. Starterkit
+## 2. Starter kit
 
-Dieses Repo **ist** das Template. Nicht von null anfangen:
+This repo **is** the template. Don't start from scratch:
 
 ```bash
-# Option A — GitHub Template (empfohlen)
+# Option A — GitHub Template (recommended)
 # → "Use this template" → "Create a new repository"
 
-# Option B — manuell klonen
-git clone <diese-repo-url> my-app
+# Option B — clone manually
+git clone <this-repo-url> my-app
 cd my-app
 rm -rf .git && git init
 ```
 
-Danach nur anpassen, nicht neu schreiben.
+Then just adapt it — don't rewrite it.
 
 ---
 
-## 3. Pflichtvertrag mit der Plattform
+## 3. Mandatory contract with the platform
 
-Diese Dinge sind nicht verhandelbar — die Plattform bricht sonst beim Deploy ab.
+These things are non-negotiable — the platform aborts the deploy otherwise.
 
-### 3.1 Pflicht-Variablen in `variables.tf`
+### 3.1 Required variables in `variables.tf`
 
 ```hcl
-# Immer deklarieren — Worker injiziert Teams + User
+# Always declare — worker injects teams + users
 variable "users" {
-  description = "Per-team roster — vom Worker injiziert. @platform:internal"
+  description = "Per-team roster — injected by the worker. @platform:internal"
   type = map(list(object({ email = string })))
   default = {}
 }
 
-# Nur wenn packer/ existiert — Worker setzt den Image-Namen
+# Only if packer/ exists — worker sets the image name
 variable "image_name" {
-  description = "Glance-Image-Name — vom Worker zur Apply-Zeit gesetzt. @platform:internal"
+  description = "Glance image name — set by the worker at apply time. @platform:internal"
   type        = string
 }
 
-# Bei Multi-Packer-Images (packer/<key>/) — je ein Eintrag pro Subdirectory
+# For multi-Packer images (packer/<key>/) — one entry per subdirectory
 variable "image_name_<key>" {
-  description = "Glance-Image-Name des <key>-Images — @platform:internal"
+  description = "Glance image name of the <key> image — @platform:internal"
   type        = string
 }
 ```
 
-### 3.2 Pflicht-Outputs in `outputs.tf`
+### 3.2 Required outputs in `outputs.tf`
 
-Alle drei müssen deklariert sein — auch wenn sie leer sind:
+All three must be declared — even if empty:
 
 ```hcl
 output "user_accounts" { sensitive = true; value = {} }
@@ -90,8 +89,8 @@ output "team_vms"      { value = {} }
 output "teams_summary" { value = {} }
 ```
 
-`user_accounts`-Key muss die Form `<team>-<username>` haben.
-`team_vms` braucht `url` (Webanwendung) oder `ssh_command` (SSH) für klickbare Links im UI.
+The `user_accounts` key must have the form `<team>-<username>`.
+`team_vms` needs `url` (web app) or `ssh_command` (SSH) for clickable links in the UI.
 
 ### 3.3 Provider
 
@@ -99,64 +98,64 @@ output "teams_summary" { value = {} }
 provider "openstack" { cloud = "openstack" }
 ```
 
-Der Profilname `openstack` in `clouds.yaml` ist fix — die Plattform setzt ihn so.
+The profile name `openstack` in `clouds.yaml` is fixed — the platform sets it this way.
 
 ---
 
-## 4. Wizard-Variablen steuern
+## 4. Controlling wizard variables
 
-Mit dem `@openstack`-Marker in der `description` einer Variable bestimmst du, welches
-UI-Element der AppStore-Wizard rendert. Ohne Marker: freies Textfeld.
+The `@openstack` marker in a variable's `description` determines which UI element the
+AppStore wizard renders. Without a marker: a free-text field.
 
 ```
 @openstack:<type>[:<mode>][:<multi>][:<var_scope>]
 ```
 
-| `type`           | Wizard-Element          |
+| `type`           | Wizard element          |
 |------------------|-------------------------|
-| `network`        | Netzwerk-Picker         |
-| `flavor`         | Flavor-Picker           |
-| `security_group` | Security-Group-Picker   |
-| `floating_ip_pool` | Ext. Netzwerk-Picker  |
-| `image`          | Glance-Image-Picker     |
-| `keypair`        | Keypair-Picker          |
-| `file`           | Datei-Upload            |
+| `network`        | Network picker          |
+| `flavor`         | Flavor picker           |
+| `security_group` | Security group picker   |
+| `floating_ip_pool` | External network picker |
+| `image`          | Glance image picker     |
+| `keypair`        | Keypair picker          |
+| `file`           | File upload             |
 
-| `mode`   | Bedeutung           |
-|----------|---------------------|
-| `id`     | UUID zurückgeben    |
-| `name`   | Name zurückgeben (Default) |
+| `mode`   | Meaning              |
+|----------|----------------------|
+| `id`     | Return UUID          |
+| `name`   | Return name (default) |
 
-| `var_scope` | Bedeutung                              | Pflicht-HCL-Typ |
-|-------------|----------------------------------------|-----------------|
-| `all`       | Ein Wert für alle Teams (Default)      | beliebig        |
-| `team`      | Einen Wert pro Team                    | `map(...)`      |
-| `user`      | Einen Wert pro User                    | `map(...)`      |
+| `var_scope` | Meaning                                 | Required HCL type |
+|-------------|------------------------------------------|--------------------|
+| `all`       | One value for all teams (default)       | any                |
+| `team`      | One value per team                      | `map(...)`         |
+| `user`      | One value per user                      | `map(...)`         |
 
-**`@platform:internal`** — Variable aus dem Wizard ausblenden (für vom Worker injizierte Werte).
+**`@platform:internal`** — hide the variable from the wizard (for values injected by the worker).
 
-Beispiele:
+Examples:
 
 ```hcl
 variable "network_uuid" {
-  description = "Hauptnetzwerk @openstack:network:id"
+  description = "Primary network @openstack:network:id"
   type        = string
 }
 
 variable "flavor_name" {
-  description = "VM-Größe @openstack:flavor:name"
+  description = "VM size @openstack:flavor:name"
   type        = string
   default     = "gp1.small"
 }
 
 variable "team_flavor" {
-  description = "@openstack:flavor:id:single:team Flavor pro Team"
+  description = "@openstack:flavor:id:single:team Flavor per team"
   type        = map(string)
   default     = {}
 }
 
 variable "assignment_files" {
-  description = "@openstack:file:all:pdf|docx Aufgabenstellung"
+  description = "@openstack:file:all:pdf|docx Assignment sheet"
   type = map(object({
     name = string; content_b64 = string; content_type = string; size = number
   }))
@@ -164,91 +163,91 @@ variable "assignment_files" {
 }
 ```
 
-**File-Variablen** dürfen nie in `count` oder `for_each` referenziert werden — beim
-Destroy sind sie leer und Terraform würde Ressourcen fälschlich löschen.
+**File variables** must never be referenced in `count` or `for_each` — on destroy they
+are empty and Terraform would incorrectly delete resources.
 
 ---
 
-## 5. Lokale Entwicklung und Checks
+## 5. Local development and checks
 
-### Voraussetzungen
+### Prerequisites
 
 ```bash
 brew install terraform packer tflint tfsec   # macOS
 winget install Hashicorp.Terraform Hashicorp.Packer  # Windows
 ```
 
-`clouds.yaml` unter `~/.config/openstack/clouds.yaml` — Profilname muss `openstack` heißen.
+`clouds.yaml` under `~/.config/openstack/clouds.yaml` — the profile name must be `openstack`.
 
-### Zyklus
+### Cycle
 
 ```bash
 # Terraform
 cd terraform
 terraform fmt && terraform validate && terraform plan
 
-# Packer (nur wenn packer/ existiert)
+# Packer (only if packer/ exists)
 cd packer
 packer fmt . && packer validate .
 ```
 
-### CI (automatisch bei Push wenn Template genutzt)
+### CI (runs automatically on push when the template is used)
 
-| Workflow | Was wird geprüft |
+| Workflow | What is checked |
 |---|---|
 | `terraform.yml` | `fmt`, `validate`, `tflint`, `tfsec` |
 | `packer.yml` | `fmt`, `validate` |
 
 ---
 
-## 6. Entscheidungsbefugnis
+## 6. Decision authority
 
-### Entscheide allein
+### Decide on your own
 
-- Ressourcen-Struktur in `main.tf` (wie viele VMs, welche Netzwerke)
-- Provisioning-Skripte in `packer/scripts/`
-- Welche Wizard-Variablen angeboten werden und mit welchem Marker
-- `user-data.yaml.tpl` und cloud-init-Inhalte
-- `locals` und interne Hilfsvariablen
-- Kommentare und README-Inhalt
+- Resource structure in `main.tf` (how many VMs, which networks)
+- Provisioning scripts in `packer/scripts/`
+- Which wizard variables are offered and with what marker
+- `user-data.yaml.tpl` and cloud-init contents
+- `locals` and internal helper variables
+- Comments and README content
 
-### Halte an und frag
+### Stop and ask
 
-1. **`@openstack`-Marker-Typ fehlt im Frontend** — neue Ressourcentypen müssen im
-   Frontend-Repo und Backend-Repo gleichzeitig ergänzt werden (Vier-Stellen-Regel).
-   Das ist Aufgabe des Plattform-Teams, nicht des App-Entwicklers.
-2. **Pflicht-Outputs oder Pflicht-Variablen sollen weggelassen werden** — das bricht die
-   Plattform; erst mit dem Plattform-Team absprechen.
-3. **`clouds.yaml` oder OpenStack-Credentials** sollen committet werden — niemals tun,
-   erst Situation klären.
+1. **`@openstack` marker type missing on the frontend** — new resource types must be
+   added simultaneously in the frontend repo and backend repo (four-eyes rule). This is
+   the platform team's responsibility, not the app developer's.
+2. **Required outputs or required variables are meant to be omitted** — this breaks the
+   platform; check with the platform team first.
+3. **`clouds.yaml` or OpenStack credentials** are meant to be committed — never do this,
+   clarify the situation first.
 
 ---
 
-## 7. App registrieren
+## 7. Registering an app
 
 ```bash
-# 1. Git-Tag erstellen (Semver, z.B. v1.0.0)
+# 1. Create a Git tag (semver, e.g. v1.0.0)
 git tag v1.0.0 && git push origin v1.0.0
 
-# 2. Bei privatem Repo: Collaborator hinzufügen
+# 2. For a private repo: add a collaborator
 # GitHub → Settings → Collaborators → "six7clickndeploy"
 
-# 3. Im AppStore registrieren
-# AppStore → "App hinzufügen" → GitHub-URL eintragen
+# 3. Register in the AppStore
+# AppStore → "Add app" → enter the GitHub URL
 ```
 
-Release-Beschreibung muss enthalten: User-Management, VM-Struktur,
-konfigurierbare Variablen, Änderungen in dieser Version.
+The release description must include: user management, VM structure,
+configurable variables, changes in this version.
 
 ---
 
-## 8. Häufige Fehler
+## 8. Common errors
 
-| Fehler | Ursache |
+| Error | Cause |
 |---|---|
-| `PackerTemplateDiscoveryError` | Subdirectory-Key enthält Großbuchstaben oder Sonderzeichen |
-| `MARKER_SCOPED_REQUIRES_MAP` | `var_scope: team/user` aber HCL-Typ ist kein `map(...)` |
-| Wizard zeigt `image_name` an | `@platform:internal` in der Description fehlt |
-| Destroy löscht Ressourcen fälschlich | File-Variable in `for_each` referenziert |
-| `clouds.yaml`-Profil nicht gefunden | Profilname ist nicht `openstack` |
-| Multi-Image baut nicht | `packer/template.pkr.hcl` und `packer/<key>/` gleichzeitig vorhanden |
+| `PackerTemplateDiscoveryError` | Subdirectory key contains uppercase letters or special characters |
+| `MARKER_SCOPED_REQUIRES_MAP` | `var_scope: team/user` but the HCL type is not `map(...)` |
+| Wizard shows `image_name` | `@platform:internal` missing from the description |
+| Destroy incorrectly deletes resources | File variable referenced in `for_each` |
+| `clouds.yaml` profile not found | Profile name is not `openstack` |
+| Multi-image build fails | `packer/template.pkr.hcl` and `packer/<key>/` present at the same time |
