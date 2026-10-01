@@ -27,10 +27,11 @@ output "team_vms" {
     for team in local.teams_list : team => {
       instance_id   = openstack_compute_instance_v2.team_vm[team].id
       instance_name = openstack_compute_instance_v2.team_vm[team].name
-      fixed_ip      = openstack_networking_port_v2.team_port[team].all_fixed_ips[0]
+      fixed_ip      = local.fixed_ip_v4[team]
+      fixed_ip_v6   = local.fixed_ip_v6[team]
       floating_ip   = local.enable_floating_ip ? openstack_networking_floatingip_v2.team_fip[team].address : null
       # TODO: URL-Pfad auf App anpassen (z.B. "/pgadmin4", "/" etc.)
-      url = local.enable_floating_ip ? "http://${openstack_networking_floatingip_v2.team_fip[team].address}" : "http://${openstack_networking_port_v2.team_port[team].all_fixed_ips[0]}"
+      url = local.enable_floating_ip ? "http://${openstack_networking_floatingip_v2.team_fip[team].address}" : "http://${local.fixed_ip_v4[team]}"
     }
   }
 }
