@@ -85,6 +85,25 @@ resource "openstack_networking_port_v2" "team_port" {
   security_group_ids = [var.shared_secgroup_id]
 }
 
+# DHBWV6 ist dual-stack: ``all_fixed_ips`` enthaelt pro Team sowohl die
+# v4- als auch die v6-Adresse, Reihenfolge nicht garantiert. Wir trennen
+# per Doppelpunkt-Check (IPv6-Literale enthalten immer ":", IPv4 nie) —
+# gleiche Heuristik wie im Windows-App-Template.
+locals {
+  fixed_ip_v4 = {
+    for team in local.teams_list : team => try([
+      for fa in openstack_networking_port_v2.team_port[team].all_fixed_ips :
+      fa if !can(regex(":", fa))
+    ][0], null)
+  }
+  fixed_ip_v6 = {
+    for team in local.teams_list : team => try([
+      for fa in openstack_networking_port_v2.team_port[team].all_fixed_ips :
+      fa if can(regex(":", fa))
+    ][0], null)
+  }
+}
+
 # Pro Team eine VM
 resource "openstack_compute_instance_v2" "team_vm" {
   for_each = toset(local.teams_list)
@@ -150,7 +169,8 @@ locals {
   user_accounts = {
     for uid, user in local.users_map : uid => {
       type     = "password"
-      ip       = local.enable_floating_ip ? openstack_networking_floatingip_v2.team_fip[user.team].address : openstack_networking_port_v2.team_port[user.team].all_fixed_ips[0]
+      ip       = local.enable_floating_ip ? openstack_networking_floatingip_v2.team_fip[user.team].address : local.fixed_ip_v4[user.team]
+      ip_v6    = local.fixed_ip_v6[user.team]
       port     = 80 # TODO: App-spezifischen Port anpassen
       username = user.email
       auth     = random_password.user_passwords[uid].result
